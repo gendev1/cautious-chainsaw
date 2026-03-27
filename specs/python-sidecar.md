@@ -713,11 +713,116 @@ All agent outputs that contain financial numbers must include:
 - `confidence` score where applicable
 - Disclaimer text for tax and compliance-adjacent content
 
-## 9. RAG Architecture
+## 9. Isolation And Access Scoping
+
+The sidecar must preserve data silos across firms and respect advisor-level visibility within a firm.
+
+### 9.1 Isolation model
+
+There are two layers of scope:
+
+1. tenant isolation
+2. actor access scope
+
+Tenant isolation is mandatory in every storage and retrieval path. Data from one tenant must never be retrievable in another tenant's context.
+
+Actor access scope is applied within a tenant. If the platform allows only certain advisors or roles to view certain households, clients, accounts, emails, notes, or documents, the sidecar must receive and honor that scope. The sidecar does not decide these permissions independently. The platform provides the scope, and the sidecar enforces it in retrieval.
+
+### 9.2 Required request context
+
+Every sidecar request must include at minimum:
+
+- `tenant_id`
+- `actor_id`
+- `actor_type`
+- `request_id`
+- `conversation_id` when applicable
+- `access_scope`
+
+The `access_scope` should be explicit and structured, for example:
+
+```json
+{
+  "visibility_mode": "full_tenant" ,
+  "household_ids": ["hh_123", "hh_456"],
+  "client_ids": ["cl_123"],
+  "account_ids": ["acc_123", "acc_456"],
+  "document_ids": [],
+  "advisor_ids": ["adv_123"]
+}
+```
+
+If the platform has full-firm admins, it may send a broad tenant scope. If the platform enforces advisor-scoped visibility, it should send only the allowed resource set or a constrained scope token that resolves to that set.
+
+### 9.3 Retrieval-time enforcement
+
+Filtering must happen before context reaches the model.
+
+Allowed:
+
+- tenant-scoped vector search
+- tenant + advisor/client/household/account/document filtered search
+- platform read methods that already enforce actor scope
+
+Not allowed:
+
+- retrieving broad tenant data and asking the model to ignore unauthorized records
+- retrieving all matching chunks and filtering only after reranking
+- relying on prompt instructions as the primary isolation mechanism
+
+The LLM should only ever see context that has already passed retrieval-time scope checks.
+
+### 9.4 Document and communication visibility
+
+Every indexed or cached artifact should carry enough metadata to enforce visibility. At minimum:
+
+- `tenant_id`
+- `source_type`
+- `source_id`
+- `household_id` when applicable
+- `client_id` when applicable
+- `account_id` when applicable
+- `advisor_id` when applicable
+- `visibility_tags`
+- `created_at`
+
+Examples:
+
+- a tax return linked to one client should be retrievable only for actors who can access that client
+- a meeting transcript tied to one household should not appear in search for unrelated households
+- an advisor's email history should not be mixed into another advisor's style profile or retrieval context unless the platform explicitly allows shared visibility
+
+### 9.5 Conversation and cache isolation
+
+Conversation memory, digest caches, style profiles, and intermediate enriched reads must be scoped at least by tenant and actor.
+
+Recommended cache key patterns:
+
+- `chat:{tenant_id}:{actor_id}:{conversation_id}`
+- `digest:{tenant_id}:{actor_id}:{date}`
+- `style_profile:{tenant_id}:{actor_id}`
+- `retrieval:{tenant_id}:{actor_id}:{hash}`
+
+No cache entry should be reusable across tenants. Advisor-specific caches should not be shared across advisors unless the data is explicitly tenant-wide and non-sensitive.
+
+### 9.6 Safe retrieval flow
+
+The safe flow is:
+
+1. platform authenticates the user
+2. platform resolves tenant and actor permissions
+3. platform computes or resolves allowed access scope
+4. sidecar applies scope filters during retrieval
+5. only authorized chunks and records are passed to the model
+6. citations in the response reference only authorized sources
+
+This prevents cross-advisor or cross-client leakage even when embeddings, caches, and async jobs exist in the same service.
+
+## 10. RAG Architecture
 
 For "Ask Hazel Anything" to work across all firm data, the sidecar needs a retrieval-augmented generation pipeline.
 
-### 9.1 What gets indexed
+### 10.1 What gets indexed
 
 | Source | Indexing Trigger | Embedding Model |
 |--------|-----------------|-----------------|
@@ -727,7 +832,7 @@ For "Ask Hazel Anything" to work across all firm data, the sidecar needs a retri
 | Meeting transcripts | After transcription completes | text-embedding-3-small |
 | Client activity feed | On event (trade, transfer, etc.) | text-embedding-3-small |
 
-### 9.2 Index structure
+### 10.2 Index structure
 
 Each indexed chunk stores:
 
@@ -735,23 +840,26 @@ Each indexed chunk stores:
 - `tenant_id` (hard isolation)
 - `source_type` (document, email, crm_note, transcript, activity)
 - `source_id`
+- `household_id` (if associated)
 - `client_id` (if associated)
+- `account_id` (if associated)
 - `advisor_id` (if associated)
+- `visibility_tags`
 - `text` (chunk content)
 - `embedding` (vector)
 - `created_at`
 - `metadata` (title, sender, date, etc.)
 
-### 9.3 Search flow
+### 10.3 Search flow
 
 ```text
-query → embed → vector search (top 20, tenant-scoped)
-     → rerank by relevance + recency + client association
+query + access_scope → embed → vector search (top 20, tenant + scope filtered)
+     → rerank by relevance + recency + client association within allowed scope
      → top 5-8 chunks fed to LLM as context
      → LLM generates answer with citations
 ```
 
-## 10. Async Jobs
+## 11. Async Jobs
 
 Several features run as background jobs, not synchronous request handlers.
 
@@ -767,31 +875,31 @@ Several features run as background jobs, not synchronous request handlers.
 
 Worker process: ARQ (async Redis queue) running in a separate process from the FastAPI app.
 
-## 11. Platform Client — Narrow, Typed, Read-Only
+## 12. Platform Client — Narrow, Typed, Read-Only
 
 ```python
 class PlatformClient:
     """Narrow typed client for platform API reads. Single approved data access path."""
 
-    async def get_household_summary(self, household_id: str) -> HouseholdSummary: ...
-    async def get_account_summary(self, account_id: str) -> AccountSummary: ...
-    async def get_client_profile(self, client_id: str) -> ClientProfile: ...
-    async def get_transfer_case(self, transfer_id: str) -> TransferCase: ...
-    async def get_order_projection(self, order_id: str) -> OrderProjection: ...
-    async def get_execution_projection(self, execution_id: str) -> ExecutionProjection: ...
-    async def get_report_snapshot(self, report_id: str) -> ReportSnapshot: ...
-    async def get_document_metadata(self, document_id: str) -> DocumentMetadata: ...
-    async def get_client_timeline(self, client_id: str, days: int = 90) -> list[TimelineEvent]: ...
-    async def get_advisor_clients(self, advisor_id: str) -> list[ClientSummary]: ...
-    async def get_firm_accounts(self, filters: dict) -> list[AccountSummary]: ...
-    async def search_documents_text(self, query: str, filters: dict) -> list[DocumentMatch]: ...
+    async def get_household_summary(self, household_id: str, access_scope: AccessScope) -> HouseholdSummary: ...
+    async def get_account_summary(self, account_id: str, access_scope: AccessScope) -> AccountSummary: ...
+    async def get_client_profile(self, client_id: str, access_scope: AccessScope) -> ClientProfile: ...
+    async def get_transfer_case(self, transfer_id: str, access_scope: AccessScope) -> TransferCase: ...
+    async def get_order_projection(self, order_id: str, access_scope: AccessScope) -> OrderProjection: ...
+    async def get_execution_projection(self, execution_id: str, access_scope: AccessScope) -> ExecutionProjection: ...
+    async def get_report_snapshot(self, report_id: str, access_scope: AccessScope) -> ReportSnapshot: ...
+    async def get_document_metadata(self, document_id: str, access_scope: AccessScope) -> DocumentMetadata: ...
+    async def get_client_timeline(self, client_id: str, access_scope: AccessScope, days: int = 90) -> list[TimelineEvent]: ...
+    async def get_advisor_clients(self, advisor_id: str, access_scope: AccessScope) -> list[ClientSummary]: ...
+    async def get_firm_accounts(self, filters: dict, access_scope: AccessScope) -> list[AccountSummary]: ...
+    async def search_documents_text(self, query: str, filters: dict, access_scope: AccessScope) -> list[DocumentMatch]: ...
 ```
 
 No mutation methods. No generic data fetch. Each method is typed and bounded.
 
 The narrow client is intentional. It prevents the sidecar from becoming an unbounded hidden backend with implicit ownership over operational domains. If a capability needs new context, the platform should expose a new explicit read method rather than letting the sidecar roam through internal systems.
 
-## 12. Observability
+## 13. Observability
 
 Track via Langfuse:
 
@@ -803,7 +911,7 @@ Track via Langfuse:
 - Cache hit rates
 - Failure classification (LLM error, platform read error, transcription error)
 
-## 13. Reliability
+## 14. Reliability
 
 The platform must work without the sidecar. If Hazel is down:
 
@@ -813,7 +921,7 @@ The platform must work without the sidecar. If Hazel is down:
 
 This boundary is necessary because the platform is still responsible for correctness, permissions, workflow control, and durable records even when AI features are unavailable.
 
-## 14. Dependencies
+## 15. Dependencies
 
 ```
 # pyproject.toml core dependencies
@@ -832,7 +940,7 @@ numpy>=2.2
 scipy>=1.15
 ```
 
-## 15. Key Design Decisions
+## 16. Key Design Decisions
 
 1. **Pydantic AI over LangChain/LangGraph** — type-safe structured output, provider flexibility, clean DI for tools, testable agents without LLM calls.
 
@@ -846,7 +954,7 @@ scipy>=1.15
 
 6. **Three-tier model routing** — Copilot (Sonnet), Batch (Haiku), Analysis (Opus) based on latency/cost/accuracy trade-offs per feature.
 
-## 16. Boundary Rationale
+## 17. Boundary Rationale
 
 The sidecar is designed this way because these features mix two very different responsibilities:
 
