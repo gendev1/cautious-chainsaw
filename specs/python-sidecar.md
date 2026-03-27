@@ -4,6 +4,8 @@
 
 The Python sidecar is the AI operating layer for the wealth platform. It powers Hazel — the advisor-facing AI assistant that spans custodial data, documents, emails, CRM, meetings, and tax planning.
 
+The Python sidecar is the single home for AI/ML inference, retrieval, ranking, extraction, summarization, recommendation, and analytical modeling. The platform remains responsible for identity, permissions, integrations, workflow control, durable records, and all authoritative write execution.
+
 The sidecar exists to:
 
 - answer advisor questions across all firm data (documents, emails, notes, CRM, custodial records)
@@ -37,13 +39,17 @@ The sidecar is **read-oriented and recommendation-oriented**. It may read broadl
 This means the sidecar owns:
 
 - AI reasoning
+- ML inference
 - summarization
 - drafting
 - retrieval over approved context
+- reranking
 - classification
 - extraction
 - scoring and prioritization
 - scenario analysis
+- analytical modeling
+- recommendation generation
 
 This means the sidecar does not own:
 
@@ -54,6 +60,207 @@ This means the sidecar does not own:
 - workflow advancement
 - operational evidence storage
 - client application behavior
+
+Analytical modeling in this spec includes:
+
+- tax-loss harvesting opportunity models
+- drift and concentration models
+- anomaly detection and prioritization models
+- model-to-account fit scoring
+- household and firm-level opportunity ranking
+- scenario engines for tax and portfolio planning
+- personalization models such as advisor tone or digest ranking
+
+## 2.1 Architecture Goals
+
+The sidecar architecture should optimize for:
+
+- strict tenant isolation and scoped retrieval
+- fast iteration on AI and ML features without destabilizing operational systems
+- narrow, auditable read access into platform data
+- safe degradation when model providers or enrichment systems fail
+- low-latency interactive responses for advisor workflows
+- high-throughput asynchronous execution for batch jobs and analytical sweeps
+- structured outputs that downstream platform services can validate and consume
+
+## 2.2 Logical Architecture
+
+```text
+advisor web/mobile surface
+    -> platform API
+        -> auth, tenant resolution, permission checks
+        -> request shaping and access scope derivation
+        -> python sidecar
+            -> fastapi routers
+            -> pydantic ai agents / analytical models
+            -> platform client (read-only)
+            -> adapter readers (email, crm, calendar, documents)
+            -> rag / embeddings / reranking
+            -> redis cache and job queue
+            -> model providers
+        -> structured AI result returned to platform
+    -> optional platform command flow if user accepts recommendation
+```
+
+The key rule is that the sidecar sits beside the operational core, not inside the authoritative write path.
+
+## 2.3 Runtime Components
+
+The sidecar should be implemented as a small set of explicit runtime components:
+
+### 2.3.1 API process
+
+Responsibilities:
+
+- expose FastAPI routes
+- validate request schemas
+- attach tenant, actor, request, and access-scope context
+- invoke the correct agent or analytical pipeline
+- stream or return structured responses
+- avoid long-running heavy batch computation on the request thread
+
+### 2.3.2 Worker process
+
+Responsibilities:
+
+- execute ARQ background jobs
+- run digest generation, transcription follow-up, indexing, style-profile refresh, and firm-wide analytical sweeps
+- manage retry behavior for transient provider or read failures
+- emit job telemetry and failure classifications
+
+### 2.3.3 Retrieval subsystem
+
+Responsibilities:
+
+- ingest approved artifacts into embedding indexes
+- enforce tenant and actor scope during search
+- rerank retrieved context
+- return bounded context windows to agents
+
+### 2.3.4 Model execution subsystem
+
+Responsibilities:
+
+- route requests to the correct LLM, embedding, transcription, or scoring model
+- apply provider fallback policy
+- normalize model responses into typed result objects
+- track token, latency, and cost metrics
+
+### 2.3.5 Platform client
+
+Responsibilities:
+
+- provide the single approved internal read boundary
+- keep data access typed, narrow, and versioned
+- attach access scope to each read call
+- prevent the sidecar from becoming a hidden general-purpose backend
+
+## 2.4 Deployment Topology
+
+Recommended deployment units:
+
+- `sidecar-api`
+  FastAPI service for synchronous and streaming requests
+- `sidecar-worker`
+  ARQ worker service for async jobs
+- `redis`
+  shared cache, conversation memory, and queue backend
+- `vector store`
+  pgvector or equivalent retrieval backend
+- `object storage`
+  platform-managed artifact storage for audio and documents
+- `observability backend`
+  Langfuse and normal service logs/metrics
+
+Recommended scaling approach:
+
+- scale `sidecar-api` on request concurrency and latency
+- scale `sidecar-worker` on queue depth and job duration
+- isolate expensive analytical jobs from interactive chat capacity
+
+## 2.5 State And Storage Model
+
+The sidecar should keep only the minimum state necessary to perform AI/ML work safely.
+
+State that may live in the sidecar layer:
+
+- short-lived conversation memory
+- retrieval indexes and embeddings
+- style profiles and personalization artifacts
+- intermediate enriched context caches
+- async job state and retry metadata
+- analytical model outputs that are not authoritative records
+
+State that should remain outside the sidecar:
+
+- canonical client, household, account, and workflow data
+- durable report records
+- official meeting records
+- official CRM or mailbox state
+- permissions and entitlements
+- authoritative task and activity records
+
+## 2.6 Request Lifecycle
+
+### 2.6.1 Interactive request lifecycle
+
+```text
+platform request
+    -> validate actor and tenant
+    -> compute access scope
+    -> call sidecar endpoint
+    -> sidecar reads scoped context
+    -> sidecar agent/model computes result
+    -> sidecar returns typed response with as_of/confidence/citations
+    -> platform renders response and optionally converts recommendations into command flows
+```
+
+### 2.6.2 Async job lifecycle
+
+```text
+platform event or scheduled trigger
+    -> enqueue ARQ job
+    -> worker loads scoped context
+    -> worker runs model pipeline
+    -> worker stores non-authoritative result or returns artifact reference to platform
+    -> platform owns any publication, mutation, or downstream execution
+```
+
+## 2.7 Interface Contract Principles
+
+Every sidecar endpoint should follow these technical rules:
+
+- input and output are Pydantic models
+- responses are typed and machine-consumable, not just prose
+- all financial or analytical answers include freshness metadata
+- recommendations are declarative and non-executing
+- citations and supporting resource identifiers are included where relevant
+- errors are classified into platform-read, model-provider, validation, and internal-processing failures
+
+## 2.8 Failure And Fallback Principles
+
+The sidecar should degrade by feature, not fail the wealth platform as a whole.
+
+Examples:
+
+- if the primary LLM fails, use fallback model if policy allows
+- if retrieval is partially unavailable, return a bounded degraded answer with warnings
+- if transcription fails, preserve the job state and return failure classification without corrupting platform records
+- if analytical enrichment fails, do not invent missing values or claim authoritative conclusions
+
+## 2.9 Technical Boundaries
+
+The sidecar is a specialized AI/ML service, not a second application backend.
+
+It should therefore avoid:
+
+- owning business workflows
+- exposing generic unrestricted internal querying
+- storing long-term operational truth
+- hiding authorization logic inside prompts or agent code
+- directly mutating external systems
+
+This keeps the architecture auditable and allows AI/ML work to evolve without destabilizing platform correctness.
 
 ## 3. Agent Framework
 
@@ -108,6 +315,30 @@ analysis_agent = Agent(
 ```
 
 ## 4. Feature Architecture
+
+### 4.0 Cross-Cutting AI/ML Modeling Layer
+
+The feature sections below describe user-facing capabilities, but they all rely on a shared modeling layer inside the sidecar.
+
+This layer is responsible for:
+
+- inference orchestration across LLMs, embedding models, transcription models, and narrow predictive models
+- retrieval and reranking over documents, emails, CRM notes, transcripts, and activity streams
+- feature computation for account, household, advisor, and firm-level analytics
+- recommendation ranking and prioritization
+- scenario generation and scoring
+- batch analytical sweeps across scoped resource sets
+
+The modeling layer may combine:
+
+- prompt-based reasoning
+- deterministic rules
+- statistical scoring
+- heuristic ranking
+- lightweight supervised models
+- embedding similarity and reranking models
+
+The sidecar is therefore not just a prompt wrapper. It is the platform's AI/ML execution layer.
 
 ### Feature 1: Ask Hazel Anything — Firmwide Knowledge Assistant
 
@@ -519,6 +750,13 @@ class Alert(BaseModel):
 
 **Boundary note:** The sidecar does not own custodial integrations themselves. It consumes approved platform reads or integration projections and computes analytics on top of them.
 
+**Modeling note:** This feature should be backed by explicit analytical models, not only free-form prompting. For example:
+
+- deterministic threshold models for drift, concentration, and beneficiary completeness
+- account-level ranking models for urgency and opportunity sizing
+- tax-loss harvesting candidate scoring models
+- household rollup models that aggregate account-level findings into advisor-ready recommendations
+
 ---
 
 ### Feature 12: Firm-Wide Analytical Reporting
@@ -875,7 +1113,75 @@ Several features run as background jobs, not synchronous request handlers.
 
 Worker process: ARQ (async Redis queue) running in a separate process from the FastAPI app.
 
-## 12. Platform Client — Narrow, Typed, Read-Only
+## 12. Analytical Modeling Layer
+
+Analytical modeling is a first-class sidecar responsibility.
+
+### 12.1 Model categories
+
+The sidecar should support multiple model categories under one operational layer:
+
+- foundation models for reasoning, summarization, drafting, extraction, and explanation
+- embedding models for retrieval and similarity search
+- reranking models for result ordering and context compression
+- transcription models for speech-to-text
+- analytical scoring models for tax, portfolio, household, and firm-level prioritization
+- personalization models for advisor tone, digest ranking, and workflow recommendations
+
+### 12.2 Example analytical models
+
+Examples that should live in the sidecar:
+
+- tax-loss harvesting candidate scoring
+- wash-sale risk heuristics used in opportunity ranking
+- concentration and drift severity scoring
+- RMD risk ranking
+- stale-document or missing-beneficiary prioritization
+- client outreach priority ranking
+- model marketplace recommendation scoring
+- firm-wide opportunity scoring and bucketing
+
+These may be implemented with a mix of deterministic policy logic, statistical scoring, heuristics, or learned models depending on the maturity of the platform.
+
+### 12.3 Model inputs
+
+Model inputs should come only from approved platform reads and scoped artifacts. Inputs may include:
+
+- holdings, lots, gains/losses, cash balances, and benchmark data
+- account registrations and beneficiary status
+- household and advisor relationship data
+- report snapshots and operational projections
+- document extraction outputs
+- CRM notes, activity history, and meeting summaries
+- advisor interaction patterns and historical feedback
+
+### 12.4 Model outputs
+
+Analytical models should return structured outputs, not just prose. Typical output fields:
+
+- `score`
+- `severity`
+- `confidence`
+- `as_of`
+- `drivers`
+- `assumptions`
+- `recommended_actions`
+- `supporting_resource_ids`
+
+### 12.5 Governance expectations
+
+Each model or scoring pipeline should declare:
+
+- owner
+- intended decision-support use case
+- required input freshness
+- known limitations
+- reviewability of outputs
+- whether the model is deterministic, heuristic, or learned
+
+The sidecar owns the execution of these models. The platform owns any downstream operational action that consumes their outputs.
+
+## 13. Platform Client — Narrow, Typed, Read-Only
 
 ```python
 class PlatformClient:
@@ -899,7 +1205,7 @@ No mutation methods. No generic data fetch. Each method is typed and bounded.
 
 The narrow client is intentional. It prevents the sidecar from becoming an unbounded hidden backend with implicit ownership over operational domains. If a capability needs new context, the platform should expose a new explicit read method rather than letting the sidecar roam through internal systems.
 
-## 13. Observability
+## 14. Observability
 
 Track via Langfuse:
 
@@ -911,7 +1217,15 @@ Track via Langfuse:
 - Cache hit rates
 - Failure classification (LLM error, platform read error, transcription error)
 
-## 14. Reliability
+Track for analytical models as well:
+
+- scoring distribution by model type
+- recommendation acceptance or dismissal feedback when available
+- drift between model output and downstream human decisions
+- freshness of analytical inputs
+- per-model failure and fallback rates
+
+## 15. Reliability
 
 The platform must work without the sidecar. If Hazel is down:
 
@@ -921,7 +1235,7 @@ The platform must work without the sidecar. If Hazel is down:
 
 This boundary is necessary because the platform is still responsible for correctness, permissions, workflow control, and durable records even when AI features are unavailable.
 
-## 15. Dependencies
+## 16. Dependencies
 
 ```
 # pyproject.toml core dependencies
@@ -938,9 +1252,10 @@ pdfplumber>=0.11             # PDF parsing
 pymupdf>=1.25                # PDF parsing
 numpy>=2.2
 scipy>=1.15
+scikit-learn>=1.6            # Classical ML and ranking baselines where useful
 ```
 
-## 16. Key Design Decisions
+## 17. Key Design Decisions
 
 1. **Pydantic AI over LangChain/LangGraph** — type-safe structured output, provider flexibility, clean DI for tools, testable agents without LLM calls.
 
@@ -954,7 +1269,9 @@ scipy>=1.15
 
 6. **Three-tier model routing** — Copilot (Sonnet), Batch (Haiku), Analysis (Opus) based on latency/cost/accuracy trade-offs per feature.
 
-## 17. Boundary Rationale
+7. **Analytical modeling lives in the sidecar** — TLH scoring, concentration analysis, ranking, personalization, and recommendation models are all part of the sidecar's AI/ML mandate rather than scattered through platform services.
+
+## 18. Boundary Rationale
 
 The sidecar is designed this way because these features mix two very different responsibilities:
 
