@@ -1,0 +1,210 @@
+{
+    "features": {
+        "core-infrastructure": {
+            "started_at": "2026-03-28T05:28:56.169337+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:30:23.618472+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:33:21.603382+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:34:01.442827+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:34:46.610430+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:36:29.616712+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:36:58.801562+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:39:15.941221+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:44:17.003741+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T05:45:50.320421+00:00"
+                }
+            }
+        },
+        "agents-and-tools": {
+            "started_at": "2026-03-28T06:17:45.977240+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:06:48.791564+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:08:39.046365+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:09:11.163377+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:09:42.018957+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:10:27.250789+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:10:41.374607+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:12:40.135411+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:21:57.039731+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:22:44.135236+00:00"
+                }
+            }
+        },
+        "rag-pipeline": {
+            "started_at": "2026-03-28T17:35:25.453220+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:43:31.039498+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:44:00.094171+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:44:20.545891+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:44:46.186908+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:53:06.884509+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:53:43.945422+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T17:55:12.891533+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T18:03:20.783656+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T18:04:21.918593+00:00"
+                }
+            }
+        },
+        "platform-client": {
+            "started_at": "2026-03-28T18:15:35.100821+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T18:16:35.346913+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T18:59:22.903089+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T18:59:48.619031+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:00:19.297253+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:02:59.722325+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:03:17.620032+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:08:27.664454+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:16:55.367831+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T19:20:18.883740+00:00"
+                }
+            }
+        },
+        "analytical-models": {
+            "started_at": "2026-03-28T21:49:34.242730+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:26.931913+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:33.683417+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:33.764615+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:33.849483+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:33.930984+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:50:55.869164+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T21:56:40.867619+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T22:06:23.936955+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-28T22:07:51.185662+00:00"
+                }
+            }
+        }
+    },
+    "active": "analytical-models"
+}

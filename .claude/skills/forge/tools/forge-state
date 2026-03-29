@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# forge-state: Manage .forge/state.json for plan/execute/status/cleanup skills.
+# Uses python3 for JSON manipulation (available on all macOS/Linux).
+
+STATE_FILE=".forge/state.json"
+
+PLAN_PHASES='["discover","explore","design-discuss","architect","handoff"]'
+EXEC_PHASES='["spike","test","implement","verify"]'
+ALL_PHASES='["discover","explore","design-discuss","architect","handoff","spike","test","implement","verify"]'
+
+usage() {
+  cat <<'EOF'
+Usage: forge-state <command> [args]
+
+Commands:
+  init <slug>                     Create feature or migrate old schema. Sets active.
+                                  Exit 0: created. Exit 2: conflict (prints active slug).
+  set <slug> <phase> <status>     Set phase status (running|done|fail|blocked).
+                                  "done" auto-sets completed_at.
+  get <slug> [phase]              Get one phase status or all phases as JSON.
+  resume <slug> plan|execute      Print next phase to resume, or "complete".
+  active                          Print active slug (or empty + exit 1 if none).
+  remove <slug>                   Remove feature from state. Clears active if it matched.
+EOF
+  exit 1
+}
+
+ensure_forge_dir() {
+  mkdir -p .forge
+}
+
+# All JSON manipulation goes through python3
+py() {
+  python3 -c "$1"
+}
+
+read_state() {
+  if [[ -f "$STATE_FILE" ]]; then
+    cat "$STATE_FILE"
+  else
+    echo '{}'
+  fi
+}
+
+write_state() {
+  ensure_forge_dir
+  echo "$1" | python3 -m json.tool > "$STATE_FILE"
+}
+
+new_feature_json() {
+  local slug="$1"
+  py "
+import json, datetime
+phases = $ALL_PHASES
+feature = {
+    'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    'phases': {p: {'status': None, 'completed_at': None} for p in phases}
+}
+print(json.dumps(feature))
+"
+}
+
+cmd_init() {
+  local slug="${1:?slug required}"
+  local state
+  state=$(read_state)
+
+  # Migrate old schema if needed
+  state=$(py "
+import json, sys
+state = json.loads('''$state''')
+if 'slug' in state and 'active' not in state:
+    migrated = {
+        'active': state['slug'],
+        'features': {
+            state['slug']: {
+                'started_at': state.get('started_at', ''),
+                'phases': state.get('phases', {})
+            }
+        }
+    }
+    print(json.dumps(migrated))
+else:
+    print(json.dumps(state))
+")
+
+  # Check for conflict
+  local active
+  active=$(py "
+import json
+state = json.loads('''$state''')
+print(state.get('active', '') or '')
+")
+
+  if [[ -n "$active" && "$active" != "$slug" ]]; then
+    # Check if active feature has incomplete phases
+    local has_incomplete
+    has_incomplete=$(py "
+import json
+state = json.loads('''$state''')
+feat = state.get('features', {}).get('$active', {})
+phases = feat.get('phases', {})
+incomplete = any(p.get('status') not in ('done',) for p in phases.values())
+print('yes' if incomplete else 'no')
+")
+    if [[ "$has_incomplete" == "yes" ]]; then
+      echo "$active"
+      exit 2
+    fi
+  fi
+
+  # Check if feature already exists
+  local exists
+  exists=$(py "
+import json
+state = json.loads('''$state''')
+print('yes' if '$slug' in state.get('features', {}) else 'no')
+")
+
+  if [[ "$exists" == "no" ]]; then
+    local feature_json
+    feature_json=$(new_feature_json "$slug")
+    state=$(py "
+import json
+state = json.loads('''$state''')
+feature = json.loads('''$feature_json''')
+if 'features' not in state:
+    state['features'] = {}
+state['features']['$slug'] = feature
+state['active'] = '$slug'
+print(json.dumps(state))
+")
+  else
+    # Feature exists, just set active
+    state=$(py "
+import json
+state = json.loads('''$state''')
+state['active'] = '$slug'
+print(json.dumps(state))
+")
+  fi
+
+  write_state "$state"
+  echo "ok"
+}
+
+cmd_set() {
+  local slug="${1:?slug required}"
+  local phase="${2:?phase required}"
+  local status="${3:?status required}"
+  local state
+  state=$(read_state)
+
+  state=$(py "
+import json, datetime
+state = json.loads('''$state''')
+feat = state.get('features', {}).get('$slug')
+if not feat:
+    print('error: feature $slug not found', file=__import__('sys').stderr)
+    __import__('sys').exit(1)
+phase_data = feat['phases'].get('$phase')
+if phase_data is None:
+    feat['phases']['$phase'] = {}
+    phase_data = feat['phases']['$phase']
+phase_data['status'] = '$status'
+if '$status' == 'done':
+    phase_data['completed_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+else:
+    phase_data['completed_at'] = None
+print(json.dumps(state))
+")
+
+  write_state "$state"
+  echo "ok"
+}
+
+cmd_get() {
+  local slug="${1:?slug required}"
+  local phase="${2:-}"
+  local state
+  state=$(read_state)
+
+  py "
+import json
+state = json.loads('''$state''')
+feat = state.get('features', {}).get('$slug')
+if not feat:
+    print('error: feature $slug not found', file=__import__('sys').stderr)
+    __import__('sys').exit(1)
+if '$phase':
+    phase_data = feat['phases'].get('$phase', {})
+    print(phase_data.get('status') or 'null')
+else:
+    print(json.dumps(feat['phases'], indent=2))
+"
+}
+
+cmd_resume() {
+  local slug="${1:?slug required}"
+  local mode="${2:?mode required (plan|execute)}"
+
+  local state
+  state=$(read_state)
+
+  local phases
+  case "$mode" in
+    plan)    phases="$PLAN_PHASES" ;;
+    execute) phases="$EXEC_PHASES" ;;
+    *)       echo "error: mode must be plan or execute" >&2; exit 1 ;;
+  esac
+
+  py "
+import json
+state = json.loads('''$state''')
+feat = state.get('features', {}).get('$slug')
+if not feat:
+    print('error: feature $slug not found', file=__import__('sys').stderr)
+    __import__('sys').exit(1)
+phases = $phases
+for p in phases:
+    status = feat['phases'].get(p, {}).get('status')
+    if status in (None, 'fail', 'blocked'):
+        print(p)
+        __import__('sys').exit(0)
+print('complete')
+"
+}
+
+cmd_active() {
+  local state
+  state=$(read_state)
+  local active
+  active=$(py "
+import json
+state = json.loads('''$state''')
+print(state.get('active', '') or '')
+")
+  if [[ -z "$active" ]]; then
+    exit 1
+  fi
+  echo "$active"
+}
+
+cmd_remove() {
+  local slug="${1:?slug required}"
+  local state
+  state=$(read_state)
+
+  state=$(py "
+import json
+state = json.loads('''$state''')
+features = state.get('features', {})
+if '$slug' in features:
+    del features['$slug']
+if state.get('active') == '$slug':
+    state['active'] = next(iter(features), None) or ''
+print(json.dumps(state))
+")
+
+  write_state "$state"
+  echo "ok"
+}
+
+# Dispatch
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  init)   cmd_init "$@" ;;
+  set)    cmd_set "$@" ;;
+  get)    cmd_get "$@" ;;
+  resume) cmd_resume "$@" ;;
+  active) cmd_active "$@" ;;
+  remove) cmd_remove "$@" ;;
+  *)      usage ;;
+esac

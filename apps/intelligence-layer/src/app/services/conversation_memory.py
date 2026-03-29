@@ -1,0 +1,122 @@
+"""
+app/services/conversation_memory.py — Redis-backed conversation memory.
+
+Stores full Pydantic AI message lists (including tool calls/results)
+with tenant-scoped keys, 2-hour TTL, and 50-message cap.
+"""
+from __future__ import annotations
+
+import json
+from datetime import timedelta
+
+import redis.asyncio as aioredis
+from pydantic_ai.messages import ModelMessage
+
+from app.services.message_codec import (
+    deserialize_message,
+    extract_active_client_id,
+    extract_active_household_id,
+    serialize_message,
+    trim_message_history,
+)
+
+CONVERSATION_TTL = timedelta(hours=2)
+MAX_MESSAGES = 50
+
+
+class ConversationMemory:
+    """Redis-backed conversation memory for multi-turn agents."""
+
+    def __init__(self, redis_client: aioredis.Redis) -> None:
+        self._redis = redis_client
+
+    def _key(
+        self,
+        tenant_id: str,
+        actor_id: str,
+        conversation_id: str,
+    ) -> str:
+        return f"chat:{tenant_id}:{actor_id}:{conversation_id}"
+
+    async def load(
+        self,
+        tenant_id: str,
+        actor_id: str,
+        conversation_id: str | None,
+    ) -> list[ModelMessage]:
+        """Load structured message history for agent.run()."""
+        if not conversation_id:
+            return []
+        key = self._key(tenant_id, actor_id, conversation_id)
+        raw = await self._redis.get(key)
+        if raw is None:
+            return []
+        payload = json.loads(raw)
+        return [
+            deserialize_message(item)
+            for item in payload["messages"]
+        ]
+
+    async def save(
+        self,
+        tenant_id: str,
+        actor_id: str,
+        conversation_id: str,
+        messages: list[ModelMessage],
+    ) -> None:
+        """Persist full structured history with trimming."""
+        key = self._key(tenant_id, actor_id, conversation_id)
+        trimmed = trim_message_history(
+            messages, max_messages=MAX_MESSAGES
+        )
+        await self._redis.set(
+            key,
+            json.dumps(
+                {
+                    "messages": [
+                        serialize_message(m) for m in trimmed
+                    ],
+                    "active_client_id": (
+                        extract_active_client_id(trimmed)
+                    ),
+                    "active_household_id": (
+                        extract_active_household_id(trimmed)
+                    ),
+                }
+            ),
+            ex=int(CONVERSATION_TTL.total_seconds()),
+        )
+
+    async def load_state(
+        self,
+        tenant_id: str,
+        actor_id: str,
+        conversation_id: str,
+    ) -> dict[str, str | None]:
+        """Load active client/household state."""
+        key = self._key(tenant_id, actor_id, conversation_id)
+        raw = await self._redis.get(key)
+        if raw is None:
+            return {
+                "active_client_id": None,
+                "active_household_id": None,
+            }
+        payload = json.loads(raw)
+        return {
+            "active_client_id": payload.get(
+                "active_client_id"
+            ),
+            "active_household_id": payload.get(
+                "active_household_id"
+            ),
+        }
+
+    async def clear(
+        self,
+        tenant_id: str,
+        actor_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Remove a conversation."""
+        key = self._key(tenant_id, actor_id, conversation_id)
+        await self._redis.delete(key)

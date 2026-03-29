@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# check-spike-freshness: Compare dependency versions in spike-report.md against
+# current package.json / requirements.txt / go.mod.
+#
+# Usage:
+#   check-spike-freshness <spike-report.md> [<project-dir>]
+#
+# Parses "Dependency version tested" lines from spike-report.md, compares against
+# current installed versions. Flags stale contracts.
+#
+# Exit codes:
+#   0 — all dependency versions match (spike is fresh)
+#   1 — stale dependencies found (spike needs rerun)
+#   2 — cannot determine versions
+
+REPORT="${1:?Usage: check-spike-freshness <spike-report.md> [<project-dir>]}"
+PROJECT_DIR="${2:-.}"
+
+if [[ ! -f "$REPORT" ]]; then
+  echo "error: $REPORT not found" >&2
+  exit 2
+fi
+
+python3 -c "
+import re, json, os, sys
+
+report_path = '$REPORT'
+project_dir = '$PROJECT_DIR'
+
+# Parse spike-report for dependency versions
+# Format: **Dependency version tested**: {package}@{version}
+content = open(report_path).read()
+spiked = {}
+
+for match in re.finditer(r'\*\*Dependency version tested\*\*:\s*(\S+)@(\S+)', content):
+    pkg = match.group(1)
+    version = match.group(2).strip('()')
+    spiked[pkg] = version
+
+if not spiked:
+    print('warn: no dependency versions found in spike-report.md')
+    sys.exit(0)
+
+# Get current versions from package.json
+current = {}
+pkg_json_path = os.path.join(project_dir, 'package.json')
+if os.path.exists(pkg_json_path):
+    try:
+        pkg = json.load(open(pkg_json_path))
+        for section in ['dependencies', 'devDependencies', 'peerDependencies']:
+            for name, ver in pkg.get(section, {}).items():
+                # Strip semver prefixes (^, ~, >=, etc.)
+                clean = re.sub(r'^[\^~>=<]+', '', ver)
+                current[name] = clean
+    except:
+        pass
+
+# Check requirements.txt
+req_path = os.path.join(project_dir, 'requirements.txt')
+if os.path.exists(req_path):
+    try:
+        for line in open(req_path):
+            line = line.strip()
+            if '==' in line:
+                parts = line.split('==')
+                current[parts[0].strip()] = parts[1].strip()
+    except:
+        pass
+
+# Check go.mod
+go_mod_path = os.path.join(project_dir, 'go.mod')
+if os.path.exists(go_mod_path):
+    try:
+        for line in open(go_mod_path):
+            match = re.match(r'\s+(\S+)\s+v(\S+)', line)
+            if match:
+                current[match.group(1)] = match.group(2)
+    except:
+        pass
+
+# Compare
+fresh = []
+stale = []
+unknown = []
+
+for pkg, spiked_ver in spiked.items():
+    if pkg in current:
+        # Simple version comparison — just check if they match
+        # Strip any leading 'v' for comparison
+        sv = spiked_ver.lstrip('v')
+        cv = current[pkg].lstrip('v')
+        if sv == cv:
+            fresh.append(f'{pkg}@{spiked_ver} (current)')
+        else:
+            stale.append(f'{pkg}: spiked {spiked_ver} → now {current[pkg]}')
+    else:
+        unknown.append(f'{pkg}@{spiked_ver} (not found in project manifests)')
+
+if stale:
+    print(f'STALE: {len(stale)} dependencies need re-spiking')
+    for s in stale:
+        print(f'  - {s}')
+    if fresh:
+        print(f'Fresh: {len(fresh)}')
+    if unknown:
+        print(f'Unknown: {len(unknown)} (not in package manifest)')
+        for u in unknown:
+            print(f'  - {u}')
+    sys.exit(1)
+else:
+    total = len(fresh) + len(unknown)
+    print(f'ok: {len(fresh)} dependencies fresh')
+    if unknown:
+        print(f'  {len(unknown)} not in package manifest (check manually)')
+        for u in unknown:
+            print(f'  - {u}')
+    sys.exit(0)
+"

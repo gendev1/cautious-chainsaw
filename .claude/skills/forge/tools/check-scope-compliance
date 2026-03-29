@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# check-scope-compliance: Compare changed files against scope boundaries.
+#
+# Usage:
+#   check-scope-compliance <implementation-context.md> [--manifest <impl-manifest.md>]
+#
+# Detects changed files via impl-manifest.md when provided, otherwise git diff.
+# Parses In Scope / Out of Scope from implementation-context.md.
+#
+# Exit codes:
+#   0 — all changes in scope
+#   1 — out-of-scope violations found
+#   2 — cannot determine changes or parse scope
+
+CONTEXT="${1:?Usage: check-scope-compliance <implementation-context.md> [--manifest <impl-manifest.md>]}"
+shift
+
+MANIFEST=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --manifest) MANIFEST="$2"; shift 2 ;;
+    *) echo "error: unknown arg $1" >&2; exit 2 ;;
+  esac
+done
+
+if [[ ! -f "$CONTEXT" ]]; then
+  echo "error: $CONTEXT not found" >&2
+  exit 2
+fi
+
+# Get changed files
+CHANGED_FILES=""
+if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
+  # Parse impl-manifest.md for file lists
+  CHANGED_FILES=$(python3 -c "
+import re
+content = open('$MANIFEST').read()
+# Extract file paths from tables (first column of Files Created / Files Modified tables)
+files = set()
+for match in re.finditer(r'\|\s*\x60?([^\x60|]+\.[a-zA-Z]+)\x60?\s*\|', content):
+    f = match.group(1).strip()
+    if '/' in f or '.' in f:
+        files.add(f)
+for f in sorted(files):
+    print(f)
+" 2>/dev/null)
+elif git rev-parse --git-dir &>/dev/null; then
+  CHANGED_FILES=$(git diff --name-only HEAD 2>/dev/null || git diff --name-only 2>/dev/null || true)
+  # Also include untracked files that are new
+  UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+  if [[ -n "$UNTRACKED" ]]; then
+    CHANGED_FILES=$(printf '%s\n%s' "$CHANGED_FILES" "$UNTRACKED")
+  fi
+else
+  echo "error: no git and no --manifest provided" >&2
+  exit 2
+fi
+
+if [[ -z "$CHANGED_FILES" ]]; then
+  echo "ok: no changed files detected"
+  exit 0
+fi
+
+# Parse scope boundaries from implementation-context.md
+SCOPE_DATA=$(python3 -c "
+import re, json, sys
+
+content = open('$CONTEXT').read()
+
+# Find Scope Boundaries section
+match = re.search(r'## Scope Boundaries\s*\n(.*?)(\n##|\Z)', content, re.DOTALL)
+if not match:
+    print(json.dumps({'error': 'no scope boundaries section'}))
+    sys.exit(0)
+
+text = match.group(1)
+
+in_scope = []
+out_scope = []
+
+# Parse In scope / Out of scope
+in_match = re.search(r'\*\*In scope\*\*:\s*(.*?)(?=\*\*Out|\Z)', text, re.DOTALL)
+out_match = re.search(r'\*\*Out of scope\*\*:\s*(.*?)(?=\n##|\Z)', text, re.DOTALL)
+
+def parse_scope_list(text):
+    items = []
+    # Split by newlines first, then by commas within each line
+    for line in text.strip().split('\n'):
+        line = line.strip().lstrip('- ').strip('\`')
+        if line and not line.startswith('**'):
+            for item in line.split(','):
+                item = item.strip().strip('\`')
+                if item:
+                    items.append(item)
+    return items
+
+if in_match:
+    in_scope = parse_scope_list(in_match.group(1))
+
+if out_match:
+    out_scope = parse_scope_list(out_match.group(1))
+
+print(json.dumps({'in_scope': in_scope, 'out_scope': out_scope}))
+" 2>/dev/null)
+
+# Check each changed file against scope
+python3 -c "
+import json, sys, fnmatch, os
+
+scope = json.loads('''$SCOPE_DATA''')
+if 'error' in scope:
+    print('warn: ' + scope['error'])
+    sys.exit(0)
+
+in_scope = scope['in_scope']
+out_scope = scope['out_scope']
+changed = '''$CHANGED_FILES'''.strip().split('\n')
+changed = [f for f in changed if f.strip()]
+
+# Filter out .forge files — never in scope
+changed = [f for f in changed if not f.startswith('.forge/')]
+
+def matches_any(filepath, patterns):
+    for pattern in patterns:
+        # Exact match
+        if filepath == pattern:
+            return True
+        # Directory prefix match
+        if pattern.endswith('/') and filepath.startswith(pattern):
+            return True
+        if not pattern.endswith('/') and filepath.startswith(pattern + '/'):
+            return True
+        # Glob match
+        if fnmatch.fnmatch(filepath, pattern):
+            return True
+        # Basename match
+        if fnmatch.fnmatch(os.path.basename(filepath), pattern):
+            return True
+    return False
+
+violations = []
+in_scope_files = []
+
+for f in changed:
+    if matches_any(f, out_scope):
+        violations.append(f)
+    elif in_scope and not matches_any(f, in_scope):
+        violations.append(f)
+    else:
+        in_scope_files.append(f)
+
+if violations:
+    print(f'VIOLATIONS: {len(violations)} out-of-scope files')
+    for v in violations:
+        print(f'  - {v}')
+    sys.exit(1)
+else:
+    print(f'ok: {len(in_scope_files)} files, all in scope')
+    sys.exit(0)
+"

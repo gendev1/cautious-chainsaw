@@ -1,0 +1,64 @@
+[project]
+name = "intelligence-layer"
+version = "0.1.0"
+description = "Python sidecar for AI/ML inference, retrieval, and analytical modeling."
+readme = "README.md"
+authors = [
+    { name = "Eswar" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "arq>=0.26.3",
+    "asyncpg>=0.30.0",
+    "fastapi>=0.118.0",
+    "httpx>=0.28.1",
+    "langfuse>=3.6.1",
+    "numpy>=2.0.0",
+    "scipy>=1.12.0",
+    "prometheus-client>=0.22.0",
+    "pydantic-ai>=0.0.55",
+    "pydantic-settings>=2.11.0",
+    "redis>=5.2.1,<6",
+    "structlog>=25.4.0",
+    "tiktoken>=0.7.0",
+    "uvicorn>=0.37.0",
+]
+
+[project.scripts]
+intelligence-layer = "app.main:main"
+
+[dependency-groups]
+dev = [
+    "anyio>=4.11.0",
+    "fakeredis>=2.26.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "ruff>=0.13.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+cache_dir = ".cache/pytest"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+cache-dir = ".cache/ruff"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/app"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/app",
+    "tests",
+    "README.md",
+    "pyproject.toml",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"

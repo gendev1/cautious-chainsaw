@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# detect-dependencies: Scan a project for external dependency usage patterns.
+#
+# Usage:
+#   detect-dependencies [<directory>]
+#
+# Scans source files for import/require patterns that indicate external dependencies.
+# Groups by dependency type (database, cache, queue, http, aws, etc.)
+#
+# Output: JSON object of detected dependencies
+#
+# Exit codes:
+#   0 — scan complete (even if no deps found)
+
+DIR="${1:-.}"
+
+python3 - "$DIR" << 'PYEOF'
+import os, re, json, sys
+
+project_dir = sys.argv[1]
+
+DETECTORS = [
+    {
+        "name": "postgres",
+        "type": "database",
+        "code_patterns": [
+            r'require\(["\']pg["\']',
+            r'from\s+["\']pg["\']',
+            r'createPool|createConnection.*postgres',
+            r'@prisma/client',
+            r'from\s+["\']prisma["\']',
+            r'knex.*postgres',
+            r'sequelize.*postgres',
+            r'typeorm.*postgres',
+        ],
+        "packages": ["pg", "@prisma/client", "knex", "sequelize", "typeorm", "drizzle-orm"],
+        "docker_service": "postgres:16-alpine",
+    },
+    {
+        "name": "mysql",
+        "type": "database",
+        "code_patterns": [
+            r'require\(["\']mysql2?["\']',
+            r'from\s+["\']mysql2?["\']',
+        ],
+        "packages": ["mysql", "mysql2"],
+        "docker_service": "mysql:8",
+    },
+    {
+        "name": "mongodb",
+        "type": "database",
+        "code_patterns": [
+            r'require\(["\']mongodb["\']',
+            r'from\s+["\']mongodb["\']',
+            r'mongoose',
+            r'MongoClient',
+        ],
+        "packages": ["mongodb", "mongoose"],
+        "docker_service": "mongo:7",
+    },
+    {
+        "name": "redis",
+        "type": "cache",
+        "code_patterns": [
+            r'require\(["\'](?:ioredis|redis)["\']',
+            r'from\s+["\'](?:ioredis|redis)["\']',
+            r'createClient.*redis',
+            r'Redis\(\)',
+        ],
+        "packages": ["redis", "ioredis"],
+        "docker_service": "redis:7-alpine",
+    },
+    {
+        "name": "kafka",
+        "type": "queue",
+        "code_patterns": [
+            r'kafkajs',
+            r'node-rdkafka',
+            r'Kafka\(',
+        ],
+        "packages": ["kafkajs", "node-rdkafka"],
+        "docker_service": "confluentinc/cp-kafka",
+    },
+    {
+        "name": "rabbitmq",
+        "type": "queue",
+        "code_patterns": [
+            r'amqplib',
+            r'amqp-connection-manager',
+        ],
+        "packages": ["amqplib", "amqp-connection-manager"],
+        "docker_service": "rabbitmq:3-management-alpine",
+    },
+    {
+        "name": "elasticsearch",
+        "type": "search",
+        "code_patterns": [
+            r'@elastic/elasticsearch',
+            r'Client.*elastic',
+        ],
+        "packages": ["@elastic/elasticsearch"],
+        "docker_service": "elasticsearch:8",
+    },
+    {
+        "name": "aws",
+        "type": "cloud",
+        "code_patterns": [
+            r'@aws-sdk/',
+            r'aws-sdk',
+            r'S3Client|DynamoDBClient|SQSClient|SNSClient',
+        ],
+        "packages": ["aws-sdk", "@aws-sdk/client-s3", "@aws-sdk/client-dynamodb", "@aws-sdk/client-sqs"],
+        "docker_service": "localstack/localstack",
+    },
+    {
+        "name": "external_http",
+        "type": "http",
+        "code_patterns": [
+            r'axios\.(get|post|put|delete|patch)',
+            r'fetch\s*\(\s*["\']https?://',
+            r'got\.(get|post|put|delete)',
+            r'node-fetch',
+            r'undici',
+        ],
+        "packages": ["axios", "got", "node-fetch", "undici", "superagent"],
+        "docker_service": "wiremock/wiremock",
+    },
+    {
+        "name": "smtp",
+        "type": "email",
+        "code_patterns": [
+            r'nodemailer',
+            r'@sendgrid/mail',
+            r'createTransport',
+        ],
+        "packages": ["nodemailer", "@sendgrid/mail"],
+        "docker_service": "axllent/mailpit",
+    },
+]
+
+SRC_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".kt"}
+SKIP_DIRS = {"node_modules", ".git", ".forge", "dist", "build", "__pycache__", ".next"}
+
+def find_source_files(directory):
+    files = []
+    for root, dirs, filenames in os.walk(directory):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for f in filenames:
+            if os.path.splitext(f)[1] in SRC_EXTENSIONS:
+                files.append(os.path.join(root, f))
+    return files
+
+def scan_file(filepath, patterns):
+    try:
+        with open(filepath, "r", errors="ignore") as f:
+            content = f.read()
+        for pattern in patterns:
+            if re.search(pattern, content):
+                return True
+    except Exception:
+        pass
+    return False
+
+# Check package.json for declared dependencies
+pkg_deps = set()
+for pkg_file in ["package.json"]:
+    pkg_path = os.path.join(project_dir, pkg_file)
+    if os.path.exists(pkg_path):
+        try:
+            with open(pkg_path) as f:
+                content = f.read()
+            for det in DETECTORS:
+                for pkg in det["packages"]:
+                    if '"' + pkg + '"' in content:
+                        pkg_deps.add(det["name"])
+        except Exception:
+            pass
+
+source_files = find_source_files(project_dir)
+results = {}
+
+for det in DETECTORS:
+    matching_files = []
+    for sf in source_files:
+        if scan_file(sf, det["code_patterns"]):
+            rel = os.path.relpath(sf, project_dir)
+            matching_files.append(rel)
+
+    detected = len(matching_files) > 0 or det["name"] in pkg_deps
+    result = {"detected": detected, "type": det["type"]}
+    if detected:
+        result["files"] = matching_files[:10]
+        result["packages"] = det["packages"]
+        result["docker_service"] = det["docker_service"]
+    results[det["name"]] = result
+
+detected_count = sum(1 for r in results.values() if r["detected"])
+print(json.dumps(results, indent=2))
+print(f"found {detected_count} external dependencies", file=sys.stderr)
+PYEOF
