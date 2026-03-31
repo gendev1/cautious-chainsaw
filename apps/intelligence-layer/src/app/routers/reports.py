@@ -134,14 +134,14 @@ async def generate_report_narrative(
 
         # Build a narrative from the structured report
         narrative_parts = []
-        if result.data.highlights:
-            narrative_parts.append("Highlights: " + "; ".join(result.data.highlights))
-        if result.data.concerns:
-            narrative_parts.append("Concerns: " + "; ".join(result.data.concerns))
+        if result.output.highlights:
+            narrative_parts.append("Highlights: " + "; ".join(result.output.highlights))
+        if result.output.concerns:
+            narrative_parts.append("Concerns: " + "; ".join(result.output.concerns))
         narrative = (
             "\n\n".join(narrative_parts)
             if narrative_parts
-            else str(result.data.model_dump())
+            else str(result.output.model_dump())
         )
 
         return ReportNarrativeResponse(

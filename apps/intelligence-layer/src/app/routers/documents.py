@@ -75,7 +75,7 @@ async def classify_document(
         )
 
         result = await doc_classifier_agent.run(prompt, deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Document classification failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc
@@ -112,7 +112,7 @@ async def extract_document_data(
         prompt_parts.append(f"\nContent:\n{body.content}")
 
         result = await doc_extractor_agent.run("\n".join(prompt_parts), deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Document extraction failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc

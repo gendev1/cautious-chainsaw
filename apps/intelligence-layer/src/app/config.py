@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     batch_fallback_model: str = "together:meta-llama/Llama-3.3-70B"
     analysis_model: str = "anthropic:claude-opus-4-6"
     extraction_model: str = "anthropic:claude-haiku-4-5"
-    embedding_model: str = "openai:text-embedding-3-small"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     # ── Redis ──────────────────────────────────────────────────────────
     redis_url: str = Field(
@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     # ── Cache TTLs ─────────────────────────────────────────────────────
     style_profile_ttl_s: int = 604800  # 7 days
     digest_cache_ttl_s: int = 86400  # 1 day
+
+    # ── Portfolio Construction ─────────────────────────────────────────
+    portfolio_freshness_warn_s: int = 86400  # 1 day
+    portfolio_theme_cache_ttl_s: int = 21600  # 6 hours
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod

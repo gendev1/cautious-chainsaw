@@ -19,6 +19,7 @@ from app.analytics.tax_loss_harvesting import (
     TaxLossHarvestingScorer,
 )
 from app.analytics.tax_scenario_engine import TaxScenarioEngine
+from app.analytics.portfolio_factor_model_v2 import PortfolioFactorModelV2
 
 
 def register_all_models() -> None:
@@ -32,3 +33,4 @@ def register_all_models() -> None:
     registry.register(BeneficiaryCompletenessAudit())
     registry.register(CashDragDetector())
     registry.register(StyleProfileExtractor())
+    registry.register(PortfolioFactorModelV2())

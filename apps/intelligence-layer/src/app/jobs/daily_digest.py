@@ -14,6 +14,7 @@ from typing import Any
 from pydantic_ai import Agent
 
 from app.jobs.enqueue import JobContext
+from app.services.llm_client import get_model
 from app.jobs.observability import JobTracer
 from app.jobs.retry import with_retry_policy
 from app.models.access_scope import AccessScope
@@ -28,7 +29,7 @@ logger = logging.getLogger("sidecar.jobs.daily_digest")
 # ---------------------------------------------------------------------------
 
 digest_agent: Agent[None, DailyDigest] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=DailyDigest,
     defer_model_check=True,
     system_prompt=(

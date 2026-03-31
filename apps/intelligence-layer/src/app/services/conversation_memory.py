@@ -63,27 +63,34 @@ class ConversationMemory:
         actor_id: str,
         conversation_id: str,
         messages: list[ModelMessage],
+        *,
+        extra_state: dict[str, str | None] | None = None,
     ) -> None:
-        """Persist full structured history with trimming."""
+        """Persist full structured history with trimming.
+
+        extra_state merges additional keys into the conversation state
+        (e.g., active_portfolio_job_id from portfolio construction).
+        """
         key = self._key(tenant_id, actor_id, conversation_id)
         trimmed = trim_message_history(
             messages, max_messages=MAX_MESSAGES
         )
+        state = {
+            "messages": [
+                serialize_message(m) for m in trimmed
+            ],
+            "active_client_id": (
+                extract_active_client_id(trimmed)
+            ),
+            "active_household_id": (
+                extract_active_household_id(trimmed)
+            ),
+        }
+        if extra_state:
+            state.update(extra_state)
         await self._redis.set(
             key,
-            json.dumps(
-                {
-                    "messages": [
-                        serialize_message(m) for m in trimmed
-                    ],
-                    "active_client_id": (
-                        extract_active_client_id(trimmed)
-                    ),
-                    "active_household_id": (
-                        extract_active_household_id(trimmed)
-                    ),
-                }
-            ),
+            json.dumps(state),
             ex=int(CONVERSATION_TTL.total_seconds()),
         )
 
@@ -93,13 +100,14 @@ class ConversationMemory:
         actor_id: str,
         conversation_id: str,
     ) -> dict[str, str | None]:
-        """Load active client/household state."""
+        """Load active client/household/portfolio state."""
         key = self._key(tenant_id, actor_id, conversation_id)
         raw = await self._redis.get(key)
         if raw is None:
             return {
                 "active_client_id": None,
                 "active_household_id": None,
+                "active_portfolio_job_id": None,
             }
         payload = json.loads(raw)
         return {
@@ -108,6 +116,9 @@ class ConversationMemory:
             ),
             "active_household_id": payload.get(
                 "active_household_id"
+            ),
+            "active_portfolio_job_id": payload.get(
+                "active_portfolio_job_id"
             ),
         }
 

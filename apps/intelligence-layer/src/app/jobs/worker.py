@@ -17,6 +17,7 @@ from app.jobs.daily_digest import run_daily_digest
 from app.jobs.email_triage import run_email_triage
 from app.jobs.firm_report import run_firm_report
 from app.jobs.meeting_summary import run_meeting_summary
+from app.jobs.portfolio_construction import run_portfolio_construction
 from app.jobs.rag_index import run_rag_index_update
 from app.jobs.retry import with_retry_policy
 from app.jobs.style_profile import run_style_profile_refresh
@@ -85,6 +86,10 @@ class WorkerSettings:
         func(
             with_retry_policy(run_rag_index_update),
             name="run_rag_index_update",
+        ),
+        func(
+            with_retry_policy(run_portfolio_construction),
+            name="run_portfolio_construction",
         ),
     ]
 

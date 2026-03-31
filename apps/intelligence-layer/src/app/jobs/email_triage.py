@@ -13,6 +13,7 @@ from typing import Any
 from pydantic_ai import Agent
 
 from app.jobs.enqueue import JobContext
+from app.services.llm_client import get_model
 from app.jobs.observability import JobTracer
 from app.jobs.retry import with_retry_policy
 from app.models.access_scope import AccessScope
@@ -32,7 +33,7 @@ CURSOR_TTL_S = 86_400 * 7  # 7 days
 # ---------------------------------------------------------------------------
 
 triage_agent: Agent[None, list[TriagedEmail]] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=list[TriagedEmail],
     defer_model_check=True,
     system_prompt=(

@@ -3,6 +3,8 @@ app/jobs/enqueue.py �� Job enqueue helpers for the API process.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from arq.connections import ArqRedis, RedisSettings, create_pool
 from pydantic import BaseModel
 
@@ -99,5 +101,21 @@ async def enqueue_rag_index_update(
         source_type,
         source_id,
         event_type,
+    )
+    return job.job_id
+
+
+async def enqueue_portfolio_construction(
+    job_ctx: JobContext,
+    request: Any,
+) -> str:
+    """Enqueue a portfolio construction job."""
+    pool = await get_job_pool()
+    request_data = request.model_dump() if hasattr(request, "model_dump") else request
+    job = await pool.enqueue_job(
+        "run_portfolio_construction",
+        job_ctx.model_dump(),
+        request_data,
+        _job_timeout=1800,
     )
     return job.job_id

@@ -46,6 +46,11 @@ async def chat(
             request.household_id
             or state["active_household_id"]
         )
+    if hasattr(deps, "active_portfolio_job_id"):
+        deps.active_portfolio_job_id = (
+            request.portfolio_job_id
+            or state.get("active_portfolio_job_id")
+        )
 
     # Run agent with history
     result = await entry.agent.run(
@@ -62,7 +67,7 @@ async def chat(
         result.all_messages(),
     )
 
-    return result.data
+    return result.output
 
 
 @router.post("/chat/stream")
@@ -90,6 +95,11 @@ async def chat_stream(
             request.household_id
             or state["active_household_id"]
         )
+    if hasattr(deps, "active_portfolio_job_id"):
+        deps.active_portfolio_job_id = (
+            request.portfolio_job_id
+            or state.get("active_portfolio_job_id")
+        )
 
     async def event_stream():
         async with entry.agent.run_stream(
@@ -100,7 +110,7 @@ async def chat_stream(
             async for chunk in result.stream_text():
                 yield f"data: {chunk}\n\n"
 
-            await result.get_data()
+            await result.get_output()
             await memory.save(
                 deps.tenant_id,
                 deps.actor_id,

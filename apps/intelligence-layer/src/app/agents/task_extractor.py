@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import ExtractedTask
 from app.tools.search import (
@@ -19,7 +20,7 @@ from app.tools.search import (
 
 task_extractor_agent: Agent[AgentDeps, list[ExtractedTask]] = (
     Agent(
-        model="anthropic:claude-haiku-4-5",
+        model=get_model("extraction"),
         output_type=list[ExtractedTask],
         tools=[
             search_meeting_transcripts,

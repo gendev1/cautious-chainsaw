@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import MeetingPrep
 from app.tools.platform import (
@@ -22,7 +23,7 @@ from app.tools.search import (
 )
 
 meeting_prep_agent: Agent[AgentDeps, MeetingPrep] = Agent(
-    model="anthropic:claude-sonnet-4-6",
+    model=get_model("copilot"),
     output_type=MeetingPrep,
     tools=[
         get_household_summary,

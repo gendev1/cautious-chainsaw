@@ -9,12 +9,13 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import DocExtraction
 from app.tools.search import search_documents
 
 doc_extractor_agent: Agent[AgentDeps, DocExtraction] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("extraction"),
     output_type=DocExtraction,
     tools=[
         search_documents,

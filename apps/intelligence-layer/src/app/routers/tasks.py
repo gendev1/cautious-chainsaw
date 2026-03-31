@@ -79,8 +79,8 @@ async def extract_tasks(
         return TaskExtractionResponse(
             source_type=body.source_type,
             source_id=body.source_id,
-            tasks=result.data,
-            task_count=len(result.data),
+            tasks=result.output,
+            task_count=len(result.output),
             as_of=now,
         )
     except Exception as exc:

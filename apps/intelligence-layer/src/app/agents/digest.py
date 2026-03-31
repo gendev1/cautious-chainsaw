@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import DailyDigest
 from app.tools.calendar_adapter import get_todays_meetings
@@ -20,7 +21,7 @@ from app.tools.platform import (
 )
 
 digest_agent: Agent[AgentDeps, DailyDigest] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=DailyDigest,
     tools=[
         get_advisor_clients,

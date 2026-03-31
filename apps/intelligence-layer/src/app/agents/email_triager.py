@@ -9,12 +9,13 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import TriagedEmail
 from app.tools.search import search_crm_notes, search_emails
 
 email_triager_agent: Agent[AgentDeps, list[TriagedEmail]] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=list[TriagedEmail],
     tools=[
         search_emails,

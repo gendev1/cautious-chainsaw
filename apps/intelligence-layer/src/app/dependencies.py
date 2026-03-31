@@ -144,6 +144,7 @@ def get_agent_deps(request: Request):
 
     ctx = get_request_context(request)
     platform = get_platform_client(request)
+    redis = get_redis(request)
     return AgentDeps(
         platform=platform,
         access_scope=ctx.access_scope or AccessScope(
@@ -151,6 +152,7 @@ def get_agent_deps(request: Request):
         ),
         tenant_id=ctx.tenant_id,
         actor_id=ctx.actor_id,
+        redis=redis,
     )
 
 

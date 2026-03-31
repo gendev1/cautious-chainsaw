@@ -71,7 +71,7 @@ async def generate_tax_plan(
             )
 
         result = await tax_planner_agent.run("\n".join(prompt_parts), deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Tax plan generation failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc

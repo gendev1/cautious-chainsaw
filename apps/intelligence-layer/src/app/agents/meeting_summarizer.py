@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import MeetingSummary
 from app.tools.platform import (
@@ -19,7 +20,7 @@ from app.tools.search import search_crm_notes
 
 meeting_summarizer_agent: Agent[AgentDeps, MeetingSummary] = (
     Agent(
-        model="anthropic:claude-sonnet-4-6",
+        model=get_model("copilot"),
         output_type=MeetingSummary,
         tools=[
             get_household_summary,

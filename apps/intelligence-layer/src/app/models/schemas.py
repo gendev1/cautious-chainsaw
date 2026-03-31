@@ -48,6 +48,10 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
     client_id: str | None = None
     household_id: str | None = None
+    portfolio_job_id: str | None = Field(
+        default=None,
+        description="Active portfolio construction job ID for follow-up discussion.",
+    )
 
 
 # ---------------------------------------------------------------------------

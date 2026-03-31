@@ -1,9 +1,13 @@
 """
 app/services/llm_client.py — Model tier definitions and fallback chain.
+
+Model strings are read from Settings (env vars) at access time, not import
+time, so .env changes take effect without code changes.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import httpx
 from pydantic_ai import Agent
@@ -16,28 +20,59 @@ class ModelTier:
     fallback: str | None
 
 
-TIERS: dict[str, ModelTier] = {
-    "copilot": ModelTier(
-        primary="anthropic:claude-sonnet-4-6",
-        fallback="openai:gpt-4o",
-    ),
-    "batch": ModelTier(
-        primary="anthropic:claude-haiku-4-5",
-        fallback="together:meta-llama/Llama-3.3-70B",
-    ),
-    "analysis": ModelTier(
-        primary="anthropic:claude-opus-4-6",
-        fallback=None,
-    ),
-    "extraction": ModelTier(
-        primary="anthropic:claude-haiku-4-5",
-        fallback=None,
-    ),
-    "transcription": ModelTier(
-        primary="whisper:large-v3",
-        fallback="deepgram:nova-3",
-    ),
-}
+def _build_tiers() -> dict[str, ModelTier]:
+    """Build tier map from current Settings."""
+    from app.config import get_settings
+    s = get_settings()
+    return {
+        "copilot": ModelTier(primary=s.copilot_model, fallback=s.copilot_fallback_model),
+        "batch": ModelTier(primary=s.batch_model, fallback=s.batch_fallback_model),
+        "analysis": ModelTier(primary=s.analysis_model, fallback=None),
+        "extraction": ModelTier(primary=s.extraction_model, fallback=None),
+        "transcription": ModelTier(primary="whisper:large-v3", fallback="deepgram:nova-3"),
+    }
+
+
+@lru_cache(maxsize=1)
+def get_tiers() -> dict[str, ModelTier]:
+    """Cached tier map — built once from Settings on first access."""
+    return _build_tiers()
+
+
+def get_model(tier: str) -> str:
+    """Return the primary model string for a tier. Reads from Settings."""
+    tiers = get_tiers()
+    t = tiers.get(tier)
+    if t is None:
+        raise ValueError(f"Unknown model tier: {tier!r}. Available: {list(tiers)}")
+    return t.primary
+
+
+def get_fallback(tier: str) -> str | None:
+    """Return the fallback model string for a tier, or None."""
+    tiers = get_tiers()
+    t = tiers.get(tier)
+    return t.fallback if t else None
+
+
+# Backwards-compatible alias — existing code that reads TIERS directly
+# will get a dict that reads from Settings rather than hardcoded values.
+class _LazyTiers:
+    """Dict-like proxy that builds from Settings on first access."""
+    def __getitem__(self, key: str) -> ModelTier:
+        return get_tiers()[key]
+    def get(self, key: str, default=None):
+        return get_tiers().get(key, default)
+    def __contains__(self, key: str) -> bool:
+        return key in get_tiers()
+    def __len__(self) -> int:
+        return len(get_tiers())
+    def items(self):
+        return get_tiers().items()
+    def keys(self):
+        return get_tiers().keys()
+
+TIERS = _LazyTiers()
 
 
 async def run_with_fallback_chain(

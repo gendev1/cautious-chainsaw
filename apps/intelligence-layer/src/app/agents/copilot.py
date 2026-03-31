@@ -17,11 +17,13 @@ from app.models.schemas import HazelCopilot
 from app.tools.platform import (
     get_account_summary,
     get_client_timeline,
+    get_constructed_portfolio,
     get_household_summary,
     get_order_projection,
     get_report_snapshot,
     get_transfer_case,
 )
+from app.services.llm_client import get_model
 from app.tools.search import (
     search_crm_notes,
     search_documents,
@@ -32,14 +34,15 @@ from app.tools.search import (
 
 @dataclass
 class CopilotDeps(AgentDeps):
-    """Extended deps with the currently active client/household."""
+    """Extended deps with the currently active client/household/portfolio."""
 
     active_client_id: str | None = None
     active_household_id: str | None = None
+    active_portfolio_job_id: str | None = None
 
 
 copilot_agent: Agent[CopilotDeps, HazelCopilot] = Agent(
-    model="anthropic:claude-sonnet-4-6",
+    model=get_model("copilot"),
     output_type=HazelCopilot,
     tools=[
         get_household_summary,
@@ -48,6 +51,7 @@ copilot_agent: Agent[CopilotDeps, HazelCopilot] = Agent(
         get_transfer_case,
         get_order_projection,
         get_report_snapshot,
+        get_constructed_portfolio,
         search_documents,
         search_emails,
         search_crm_notes,
@@ -78,6 +82,12 @@ async def build_copilot_prompt(
         parts.append(
             f"- Active household: {ctx.deps.active_household_id}"
         )
+    if ctx.deps.active_portfolio_job_id:
+        parts.extend([
+            f"- Active portfolio proposal: job_id={ctx.deps.active_portfolio_job_id}",
+            "  (Use get_constructed_portfolio to load details when "
+            "the advisor asks about this portfolio.)",
+        ])
     parts.extend([
         "",
         "## Guidelines",
@@ -90,6 +100,17 @@ async def build_copilot_prompt(
         "performance figures. If data is unavailable, say so.",
         "- When uncertain, state your confidence level and "
         "suggest how the advisor can verify the information.",
+        "",
+        "## Portfolio Construction",
+        "- When an active portfolio proposal is in context, "
+        "use get_constructed_portfolio to load it and answer "
+        "questions about holdings, weights, scores, and rationale.",
+        "- You can explain why specific stocks were picked, "
+        "compare sector weights, discuss factor scores, and "
+        "suggest modifications.",
+        "- If the advisor wants to modify the portfolio, suggest "
+        "they use the /portfolio/construct endpoint with a "
+        "prior_job_id to revise it.",
         "",
         "## Document Handling",
         "- When a specific document ID is provided, use "
@@ -138,7 +159,7 @@ async def extract_document(
         f"Content preview:\n{content[:3000]}",
         deps=ctx.deps,
     )
-    classification = classify_result.data
+    classification = classify_result.output
 
     from app.agents.doc_extractor import (
         doc_extractor_agent,
@@ -153,7 +174,7 @@ async def extract_document(
         f"Content:\n{content[:8000]}",
         deps=ctx.deps,
     )
-    extraction = extract_result.data
+    extraction = extract_result.output
 
     return {
         "document_id": document_id,

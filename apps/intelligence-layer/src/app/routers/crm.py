@@ -74,7 +74,7 @@ async def generate_crm_sync_payload(
         now = datetime.now(UTC).isoformat()
 
         # Extract CRM payloads from the meeting summary result
-        payloads = [p.model_dump() for p in result.data.crm_sync_payloads]
+        payloads = [p.model_dump() for p in result.output.crm_sync_payloads]
 
         return CRMSyncResponse(
             payloads=payloads,

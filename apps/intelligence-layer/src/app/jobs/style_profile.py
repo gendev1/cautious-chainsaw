@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from app.jobs.enqueue import JobContext
+from app.services.llm_client import get_model
 from app.jobs.observability import JobTracer
 from app.jobs.retry import with_retry_policy
 from app.models.access_scope import AccessScope
@@ -73,7 +74,7 @@ class StyleProfile(BaseModel):
 # ---------------------------------------------------------------------------
 
 style_extractor: Agent[None, StyleProfile] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=StyleProfile,
     defer_model_check=True,
     system_prompt=(

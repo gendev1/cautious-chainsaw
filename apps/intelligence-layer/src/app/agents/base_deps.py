@@ -10,7 +10,8 @@ to agents and includes Redis, Retriever, and full RequestContext.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from app.models.access_scope import AccessScope
 from app.services.platform_client import PlatformClient
@@ -28,3 +29,4 @@ class AgentDeps:
     access_scope: AccessScope
     tenant_id: str
     actor_id: str
+    redis: Any = None  # Optional Redis client for tools that need direct cache access

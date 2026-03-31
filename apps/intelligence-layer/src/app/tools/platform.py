@@ -117,3 +117,30 @@ async def get_advisor_clients(
         advisor_id=ctx.deps.actor_id,
         access_scope=ctx.deps.access_scope,
     )
+
+
+async def get_constructed_portfolio(
+    ctx: RunContext[AgentDeps],
+    job_id: str,
+) -> dict[str, Any]:
+    """Load a previously constructed portfolio proposal by job ID.
+
+    Use this when the advisor asks about a portfolio that was recently
+    built, wants to understand why specific stocks were chosen, review
+    the rationale, check score breakdowns, or discuss modifications.
+
+    Returns the full construction result including holdings, weights,
+    scores, rationale, and warnings.
+    """
+    import json as _json
+
+    redis = ctx.deps.redis
+    raw = await redis.get(f"sidecar:portfolio:result:{job_id}")
+    if raw is None:
+        return {
+            "error": "not_found",
+            "message": f"No portfolio found for job_id={job_id}. "
+            "The job may still be running, may have expired, "
+            "or the ID may be incorrect.",
+        }
+    return _json.loads(raw)

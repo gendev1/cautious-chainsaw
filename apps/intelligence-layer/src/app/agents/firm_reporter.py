@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import FirmWideReport
 from app.tools.platform import (
@@ -18,7 +19,7 @@ from app.tools.platform import (
 )
 
 firm_reporter_agent: Agent[AgentDeps, FirmWideReport] = Agent(
-    model="anthropic:claude-opus-4-6",
+    model=get_model("analysis"),
     output_type=FirmWideReport,
     tools=[
         get_advisor_clients,

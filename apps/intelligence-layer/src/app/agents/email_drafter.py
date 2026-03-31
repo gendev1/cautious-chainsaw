@@ -9,13 +9,14 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from app.agents.base_deps import AgentDeps
+from app.services.llm_client import get_model
 from app.agents.registry import registry
 from app.models.schemas import EmailDraft
 from app.tools.platform import get_client_timeline
 from app.tools.search import search_crm_notes, search_emails
 
 email_drafter_agent: Agent[AgentDeps, EmailDraft] = Agent(
-    model="anthropic:claude-sonnet-4-6",
+    model=get_model("copilot"),
     output_type=EmailDraft,
     tools=[
         search_emails,

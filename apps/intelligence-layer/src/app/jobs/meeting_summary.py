@@ -14,6 +14,7 @@ from typing import Any
 from pydantic_ai import Agent
 
 from app.jobs.enqueue import JobContext
+from app.services.llm_client import get_model
 from app.jobs.observability import JobTracer
 from app.jobs.retry import with_retry_policy
 from app.models.schemas import (
@@ -35,7 +36,7 @@ SUMMARY_TTL_S = 604_800  # 7 days
 # ---------------------------------------------------------------------------
 
 summary_agent: Agent[None, MeetingSummary] = Agent(
-    model="anthropic:claude-sonnet-4-6",
+    model=get_model("copilot"),
     output_type=MeetingSummary,
     defer_model_check=True,
     system_prompt=(

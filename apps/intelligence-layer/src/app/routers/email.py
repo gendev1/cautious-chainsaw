@@ -69,7 +69,7 @@ async def draft_email(
             prompt_parts.append(f"This is a reply to email ID: {body.reply_to_email_id}")
 
         result = await email_drafter_agent.run("\n".join(prompt_parts), deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Email draft generation failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc
@@ -103,7 +103,7 @@ async def triage_emails(
         )
 
         result = await email_triager_agent.run(prompt, deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Email triage failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc

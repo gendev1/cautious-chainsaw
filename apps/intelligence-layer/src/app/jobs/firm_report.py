@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from app.jobs.enqueue import JobContext
+from app.services.llm_client import get_model
 from app.jobs.observability import JobTracer
 from app.jobs.retry import with_retry_policy
 from app.models.access_scope import AccessScope
@@ -63,7 +64,7 @@ class ReportSection(BaseModel):
 ACCOUNT_BATCH_SIZE = 10
 
 account_analyst: Agent[None, AccountAnalysis] = Agent(
-    model="anthropic:claude-haiku-4-5",
+    model=get_model("batch"),
     output_type=AccountAnalysis,
     defer_model_check=True,
     system_prompt=(
@@ -77,7 +78,7 @@ account_analyst: Agent[None, AccountAnalysis] = Agent(
 )
 
 report_aggregator: Agent[None, FirmWideReport] = Agent(
-    model="anthropic:claude-opus-4-6",
+    model=get_model("analysis"),
     output_type=FirmWideReport,
     defer_model_check=True,
     system_prompt=(

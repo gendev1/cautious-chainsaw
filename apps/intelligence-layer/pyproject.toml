@@ -21,6 +21,7 @@ dependencies = [
     "redis>=5.2.1,<6",
     "structlog>=25.4.0",
     "tiktoken>=0.7.0",
+    "scikit-learn>=1.4.0",
     "uvicorn>=0.37.0",
 ]
 

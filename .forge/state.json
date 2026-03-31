@@ -204,7 +204,48 @@
                     "completed_at": "2026-03-28T22:07:51.185662+00:00"
                 }
             }
+        },
+        "portfolio-construction-v2": {
+            "started_at": "2026-03-30T06:23:31.076808+00:00",
+            "phases": {
+                "discover": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:26:08.729132+00:00"
+                },
+                "explore": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:35:13.542048+00:00"
+                },
+                "design-discuss": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:37:59.754732+00:00"
+                },
+                "architect": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:42:38.655157+00:00"
+                },
+                "handoff": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:51:42.720713+00:00"
+                },
+                "spike": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T06:53:59.654792+00:00"
+                },
+                "test": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T07:07:07.388338+00:00"
+                },
+                "implement": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T07:41:12.535800+00:00"
+                },
+                "verify": {
+                    "status": "done",
+                    "completed_at": "2026-03-30T07:42:23.821857+00:00"
+                }
+            }
         }
     },
-    "active": "analytical-models"
+    "active": "portfolio-construction-v2"
 }

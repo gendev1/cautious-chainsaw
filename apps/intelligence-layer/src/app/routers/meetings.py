@@ -89,7 +89,7 @@ async def prepare_meeting(
             prompt_parts.append(f"Meeting date: {body.meeting_date}")
 
         result = await meeting_prep_agent.run("\n".join(prompt_parts), deps=deps)
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Meeting prep generation failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc
@@ -170,11 +170,11 @@ async def summarize_meeting(
         cache_key = f"meeting_summary:{ctx.tenant_id}:{body.meeting_id}"
         await redis.set(
             cache_key,
-            result.data.model_dump_json(),
+            result.output.model_dump_json(),
             ex=86400,  # 24 hour TTL
         )
 
-        return result.data
+        return result.output
     except Exception as exc:
         logger.exception("Meeting summarization failed")
         raise ModelProviderHTTPError(str(exc), ctx.request_id) from exc

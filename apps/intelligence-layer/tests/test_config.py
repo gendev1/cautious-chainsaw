@@ -4,9 +4,16 @@ from __future__ import annotations
 from app.config import Settings, get_settings
 
 
-def test_settings_loads_with_defaults() -> None:
+def test_settings_loads_with_defaults(monkeypatch) -> None:
     """T11: Settings loads with defaults when no env vars are set."""
-    settings = Settings()
+    # Clear env vars so we test true defaults, not .env file values
+    for key in (
+        "SIDECAR_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY",
+        "SIDECAR_OPENAI_API_KEY", "OPENAI_API_KEY",
+        "SIDECAR_REDIS_URL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    settings = Settings(_env_file=None)
     assert settings.environment == "development"
     assert settings.debug is False
     assert settings.log_level == "INFO"
