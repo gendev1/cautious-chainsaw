@@ -107,6 +107,22 @@ class Settings(BaseSettings):
     portfolio_freshness_warn_s: int = 86400  # 1 day
     portfolio_theme_cache_ttl_s: int = 21600  # 6 hours
 
+    # ── Compaction (ported from Claude Code services/compact/) ─────────
+    compaction_strategy: Literal["deterministic", "llm", "hybrid"] = "hybrid"
+    compaction_token_threshold: int = 30_000
+    compaction_llm_escalation_multiplier: float = 2.0
+    compaction_recent_to_keep: int = 10
+    compaction_circuit_breaker_threshold: int = 3
+    compaction_circuit_breaker_recovery_s: float = 60.0
+    compaction_microcompact_max_chars: int = 4_000
+
+    # ── Hooks (ported from Claude Code utils/hooks/) ──────────────────
+    hooks_enabled: bool = True
+    hook_timeout_s: float = 5.0
+
+    # ── Cost Tracking (ported from Claude Code cost-tracker.ts) ───────
+    cost_tracking_enabled: bool = True
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:

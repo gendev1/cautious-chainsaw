@@ -2,16 +2,23 @@
 app/services/conversation_memory.py — Redis-backed conversation memory.
 
 Stores full Pydantic AI message lists (including tool calls/results)
-with tenant-scoped keys, 2-hour TTL, and 50-message cap.
+with tenant-scoped keys, 2-hour TTL, and intelligent compaction.
+
+Compaction strategy (ported from Claude Code's services/compact/):
+- Microcompact: trim oversized tool results per-message
+- Auto-compact: summarize old turns when token threshold exceeded
+- Fallback: 50-message hard cap as safety net
 """
 from __future__ import annotations
 
 import json
+import logging
 from datetime import timedelta
 
 import redis.asyncio as aioredis
 from pydantic_ai.messages import ModelMessage
 
+from app.services.compaction import compact_conversation
 from app.services.message_codec import (
     deserialize_message,
     extract_active_client_id,
@@ -19,6 +26,8 @@ from app.services.message_codec import (
     serialize_message,
     trim_message_history,
 )
+
+logger = logging.getLogger("sidecar.conversation_memory")
 
 CONVERSATION_TTL = timedelta(hours=2)
 MAX_MESSAGES = 50
@@ -66,12 +75,34 @@ class ConversationMemory:
         *,
         extra_state: dict[str, str | None] | None = None,
     ) -> None:
-        """Persist full structured history with trimming.
+        """Persist full structured history with intelligent compaction.
+
+        Compaction pipeline (ported from Claude Code):
+        1. Microcompact — trim oversized tool results
+        2. Auto-compact — summarize older turns if over token threshold
+        3. Hard cap — fallback 50-message trim as safety net
 
         extra_state merges additional keys into the conversation state
         (e.g., active_portfolio_job_id from portfolio construction).
         """
         key = self._key(tenant_id, actor_id, conversation_id)
+
+        # Apply intelligent compaction before hard-cap trim
+        compaction = await compact_conversation(messages)
+        if compaction.was_compacted:
+            logger.info(
+                "conversation_compacted",
+                extra={
+                    "tenant_id": tenant_id,
+                    "conversation_id": conversation_id,
+                    "original_messages": compaction.original_count,
+                    "final_messages": compaction.final_count,
+                    "tokens_saved": compaction.estimated_tokens_saved,
+                },
+            )
+        messages = compaction.messages
+
+        # Safety-net hard cap (should rarely trigger after compaction)
         trimmed = trim_message_history(
             messages, max_messages=MAX_MESSAGES
         )
